@@ -12,17 +12,17 @@ Implements a get_pipeline(**kwargs) method.
 
 import os
 import boto3
-import logging
-import time
+import logging ## custom
+import time  ## custom
 
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError ## custom
 
 import sagemaker
 import sagemaker.session
 from sagemaker.estimator import Estimator
 from sagemaker.inputs import TrainingInput
 from sagemaker.sklearn.processing import SKLearnProcessor
-from sagemaker.tensorflow import TensorFlow
+from sagemaker.tensorflow import TensorFlow ## custom 
 
 from sagemaker.model_metrics import (
     MetricsSource,
@@ -39,7 +39,7 @@ from sagemaker.workflow.parameters import (
     ParameterInteger,
     ParameterString,
     ParameterFloat
-)
+)  # float is custom
 
 from sagemaker.workflow.pipeline import Pipeline
 from sagemaker.workflow.steps import (
@@ -58,16 +58,16 @@ from sagemaker.workflow.properties import PropertyFile
 
 from sagemaker.workflow.step_collections import RegisterModel
 
-from sagemaker.model import Model
-from sagemaker.inputs import CreateModelInput
+from sagemaker.model import Model  # custom 
+from sagemaker.inputs import CreateModelInput # custom
 
 
-sess   = sagemaker.Session()
-bucket = sess.default_bucket()
-timestamp = int(time.time())
-
+sess   = sagemaker.Session()  # custom 
+bucket = sess.default_bucket() # custom
+timestamp = int(time.time()) # custom
+ 
 BASE_DIR = os.path.dirname(os.path.realpath(__file__))
-print('BASE_DIR: {}'.format(BASE_DIR))
+print('BASE_DIR: {}'.format(BASE_DIR)) 
 
 
 def get_pipeline(
@@ -97,7 +97,7 @@ def get_pipeline(
     input_data = ParameterString(
         name="InputDataUrl",
         default_value="s3://{}/amazon-reviews-pds/tsv/".format(bucket),
-    )
+    ) ## s3 path is custom 
         
     processing_instance_count = ParameterInteger(
         name="ProcessingInstanceCount",
@@ -122,27 +122,27 @@ def get_pipeline(
     train_split_percentage = ParameterFloat(
         name="TrainSplitPercentage",
         default_value=0.90,
-    )
+    ) #custom 
 
     validation_split_percentage = ParameterFloat(
         name="ValidationSplitPercentage",
         default_value=0.05,
-    )
+    ) # custom
 
     test_split_percentage = ParameterFloat(
         name="TestSplitPercentage",
         default_value=0.05,
-    )
+    ) #custom
 
     feature_store_offline_prefix = ParameterString(
         name="FeatureStoreOfflinePrefix",
         default_value="reviews-feature-store-" + str(timestamp),
-    )
+    ) ## custom feature store integration 
 
     feature_group_name = ParameterString(
         name="FeatureGroupName",
         default_value="reviews-feature-group-" + str(timestamp)
-    )
+    ) # custom feature store integration 
     
     train_instance_type = ParameterString(
         name="TrainingInstanceType",
@@ -175,7 +175,7 @@ def get_pipeline(
             destination='/opt/ml/processing/input/data/',
             s3_data_distribution_type='ShardedByS3Key'
         )
-    ]
+    ]   # custom 
     
     processing_outputs=[
         ProcessingOutput(output_name='bert-train',
@@ -190,15 +190,15 @@ def get_pipeline(
                          s3_upload_mode='EndOfJob',                         
                          source='/opt/ml/processing/output/bert/test',
                         ),
-    ]
+    ]  # custom code is the "output name, s3 upload mode, source 
     
     # TODO:  Figure out why the Parameter's are not resolving properly to their native type when user here.
     #        We shouldn't be using `default_value`
     processing_step = ProcessingStep(
         name="Processing",
         processor=processor,
-        inputs=processing_inputs,
-        outputs=processing_outputs,
+        inputs=processing_inputs,  # custom 
+        outputs=processing_outputs, # custom 
         job_arguments=[
             '--train-split-percentage', str(train_split_percentage.default_value),
             '--validation-split-percentage', str(validation_split_percentage.default_value),
@@ -209,7 +209,7 @@ def get_pipeline(
             '--feature-group-name', str(feature_group_name.default_value)
         ],
         code=os.path.join(BASE_DIR, "preprocess-scikit-text-to-bert-feature-store.py")
-    )
+    )  ## 202 - 211 is custom
     
     
     #########################
@@ -325,7 +325,7 @@ def get_pipeline(
     ]
     
     train_src=os.path.join(BASE_DIR, "src") 
-    model_path = f"s3://{default_bucket}/{base_job_prefix}/output/model"
+    model_path = f"s3://{default_bucket}/{base_job_prefix}/output/model"  # custom to path 
         
     estimator = TensorFlow(
         entry_point='tf_bert_reviews.py',
@@ -360,7 +360,7 @@ def get_pipeline(
         input_mode=input_mode,
         metric_definitions=metrics_definitions,
 #        max_run=7200 # max 2 hours * 60 minutes seconds per hour * 60 seconds per minute
-    )    
+    )    # 217 - 363 is all custom.. original didn't have hyparameters  
 
     training_step = TrainingStep(
         name='Train',
@@ -403,16 +403,16 @@ def get_pipeline(
         name='EvaluationReport',
         output_name='metrics',
         path='evaluation.json'
-    )
+    )  ## name, output name, path are all custom to use case 
     
     evaluation_step = ProcessingStep(
-        name='EvaluateModel',
+        name='EvaluateModel',  ## custom name
         processor=evaluation_processor,
-        code=os.path.join(BASE_DIR, "evaluate_model_metrics.py"),
+        code=os.path.join(BASE_DIR, "evaluate_model_metrics.py"), # custom 
         inputs=[
             ProcessingInput(
                 source=training_step.properties.ModelArtifacts.S3ModelArtifacts,
-                destination='/opt/ml/processing/input/model'
+                destination='/opt/ml/processing/input/model'   ## custom
             ),
             ProcessingInput(
                 source=processing_step.properties.ProcessingInputs['raw-input-data'].S3Input.S3Uri,
@@ -420,12 +420,12 @@ def get_pipeline(
             )
         ],
         outputs=[
-            ProcessingOutput(output_name='metrics', 
+            ProcessingOutput(output_name='metrics',  #custom
                              s3_upload_mode='EndOfJob',
-                             source='/opt/ml/processing/output/metrics/'),
+                             source='/opt/ml/processing/output/metrics/'), # custom
         ],
         job_arguments=[
-                       '--max-seq-length', str(max_seq_length.default_value),
+                       '--max-seq-length', str(max_seq_length.default_value), # custom
                       ],
         property_files=[evaluation_report],  # these cause deserialization issues
     )    
@@ -445,14 +445,14 @@ def get_pipeline(
     #########################
     
     model_approval_status = ParameterString(
-        name="ModelApprovalStatus",
+        name="ModelApprovalStatus", # modified 
         default_value="PendingManualApproval"
     )
     
     deploy_instance_type = ParameterString(
         name="DeployInstanceType",
         default_value="ml.m5.4xlarge"
-    )
+    ) # custom 
     
     deploy_instance_count = ParameterInteger(
         name="DeployInstanceCount",
@@ -467,10 +467,10 @@ def get_pipeline(
         instance_type=deploy_instance_type,
         image_scope="inference"
     )
-    print(inference_image_uri)
+    print(inference_image_uri)  # custom - original file speicifes inference instance types
 
     register_step = RegisterModel(
-        name="RegisterModel",
+        name="RegisterModel", #custom
         estimator=estimator,
         image_uri=inference_image_uri, # we have to specify, by default it's using training image
         model_data=training_step.properties.ModelArtifacts.S3ModelArtifacts,
@@ -502,7 +502,7 @@ def get_pipeline(
         name="CreateModel",
         model=model,
         inputs=create_inputs,
-    )
+    )  ## custom - this code isn't in the modelbuild repo in the original 
     
 
     #########################
@@ -518,14 +518,14 @@ def get_pipeline(
         left=JsonGet(
             step=evaluation_step,
             property_file=evaluation_report,
-            json_path="metrics.accuracy.value",
+            json_path="metrics.accuracy.value",# modified - look at line 243 in original 
         ),
         right=min_accuracy_value # accuracy 
     )
 
     minimum_accuracy_condition_step = ConditionStep(
-        name="AccuracyCondition",
-        conditions=[minimum_accuracy_condition],
+        name="AccuracyCondition", # modified - name is changed from org. 
+        conditions=[minimum_accuracy_condition], # modified 
         if_steps=[register_step, create_step], # success, continue with model registration
         else_steps=[], # fail, end the pipeline
     )
@@ -574,7 +574,7 @@ def get_pipeline(
             model_approval_status,
             deploy_instance_type,
             deploy_instance_count          
-        ],
+        ],  ## modified - a lot more parameters than the original 
     steps=[processing_step, training_step, evaluation_step, minimum_accuracy_condition_step],
         sagemaker_session=sess
     )
